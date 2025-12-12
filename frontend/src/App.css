@@ -1,42 +1,208 @@
-#root {
-  max-width: 1280px;
+.dashboard-container {
+  max-width: 1200px;
   margin: 0 auto;
   padding: 2rem;
-  text-align: center;
+  width: 100%;
 }
 
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafbaa);
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 3rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border-color);
 }
 
-@keyframes logo-spin {
+.logo-section {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.logo-section h1 {
+  font-size: 1.5rem;
+  letter-spacing: -0.025em;
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.controls-section {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.last-updated {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.refresh-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.refresh-btn:hover:not(:disabled) {
+  background-color: var(--border-color);
+}
+
+.refresh-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
   from {
     transform: rotate(0deg);
   }
+
   to {
     transform: rotate(360deg);
   }
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  a:nth-of-type(2) .logo {
-    animation: logo-spin infinite 20s linear;
-  }
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.5rem;
 }
 
-.card {
-  padding: 2em;
+.asset-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 1.5rem;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  position: relative;
+  overflow: hidden;
 }
 
-.read-the-docs {
-  color: #888;
+.asset-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  border-color: var(--accent-primary);
+}
+
+.asset-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 4px;
+  background: linear-gradient(90deg, var(--bg-card), var(--border-color));
+  opacity: 0.5;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.card-header h3 {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.metric {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.95rem;
+}
+
+.metric .label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-secondary);
+}
+
+.metric .value {
+  font-weight: 600;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.signal-badge {
+  margin-top: 0.5rem;
+  text-align: center;
+  padding: 0.5rem;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 0.875rem;
+  color: #fff;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.error-message {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--danger);
+  font-size: 0.875rem;
+  padding: 1rem 0;
+}
+
+/* Strategy Box Styles */
+.strategy-box {
+  margin-top: 1rem;
+  background-color: rgba(0, 0, 0, 0.2);
+  border-radius: 6px;
+  padding: 0.75rem;
+  font-size: 0.8rem;
+  border: 1px solid var(--border-color);
+}
+
+.strategy-item {
+  margin-bottom: 0.5rem;
+}
+
+.strategy-item:last-child {
+  margin-bottom: 0;
+}
+
+.strategy-label {
+  font-weight: 700;
+  display: block;
+  margin-bottom: 0.2rem;
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+}
+
+.strategy-label.buy {
+  color: var(--success);
+}
+
+.strategy-label.sell {
+  color: var(--danger);
+}
+
+.strategy-desc {
+  color: var(--text-secondary);
+  line-height: 1.3;
 }

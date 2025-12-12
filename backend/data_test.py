@@ -127,15 +127,42 @@ def analyze_symbol(symbol):
         
         if latest_rsi is not None:
             result["rsi"] = latest_rsi
+            result["sma_50"] = sma_50[-1]
+            
+            # --- Estrategia ---
+            # Definir la lógica y explicación para el usuario
+            buy_reasons = []
+            sell_reasons = []
+            
+            # Análisis RSI
+            if latest_rsi < 30:
+                buy_reasons.append(f"RSI en {latest_rsi:.2f} indica SOBREVENTA (oportunidad de rebote).")
+            elif latest_rsi < 40:
+                buy_reasons.append(f"RSI bajo ({latest_rsi:.2f}), buscando zona de compra.")
+            
+            if latest_rsi > 70:
+                sell_reasons.append(f"RSI en {latest_rsi:.2f} indica SOBRECOMPRA (posible corrección).")
+            elif latest_rsi > 60:
+                sell_reasons.append(f"RSI alto ({latest_rsi:.2f}), vigilando para vender.")
+
+            # Análisis Tendencia (SMA 50)
+            current_price = prices[-1]
+            if sma_50[-1] and current_price > sma_50[-1]:
+                buy_reasons.append(f"Precio (${current_price:.2f}) por ENCIMA de SMA-50 (Tendencia Alcista).")
+            elif sma_50[-1] and current_price < sma_50[-1]:
+                sell_reasons.append(f"Precio (${current_price:.2f}) por DEBAJO de SMA-50 (Tendencia Bajista).")
+
+            result["strategy_buy"] = " | ".join(buy_reasons) if buy_reasons else "Sin señal clara de compra."
+            result["strategy_sell"] = " | ".join(sell_reasons) if sell_reasons else "Sin señal clara de venta."
+
+            # Señal Final Simplificada
             if latest_rsi < 30:
                 result["signal"] = "COMPRA"
-                result["signal_desc"] = "Sobreventa"
             elif latest_rsi > 70:
                 result["signal"] = "VENTA"
-                result["signal_desc"] = "Sobrecompra"
             else:
                 result["signal"] = "NEUTRA"
-                result["signal_desc"] = "Mantener"
+
         else:
             result["warning"] = "Insufficient data for RSI"
             
