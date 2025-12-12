@@ -107,18 +107,26 @@ def analyze_symbol(symbol):
         sma_50 = calculate_sma(prices, 50)
         sma_200 = calculate_sma(prices, 200)
         
-        # Construir historial (últimos 5)
+        # Construir historial completo (1 año) para el gráfico
         history = []
-        for i in range(len(prices) - 5, len(prices)):
-            if i >= 0:
-                rec = {
-                    "Date": time.strftime('%Y-%m-%d', time.localtime(times[i])),
-                    "Close": prices[i],
-                    "RSI_14": rsi_vals[i],
-                    "SMA_50": sma_50[i],
-                    "SMA_200": sma_200[i]
-                }
-                history.append(rec)
+        for i in range(len(prices)):
+            rec = {
+                "time": time.strftime('%Y-%m-%d', time.localtime(times[i])),
+                "close": prices[i],
+                "rsi": rsi_vals[i],
+                "sma_50": sma_50[i],
+                "sma_200": sma_200[i],
+                "signal": None
+            }
+            
+            # Determinar señal histórica para el gráfico
+            if rsi_vals[i] is not None:
+                if rsi_vals[i] < 30:
+                    rec["signal"] = "BUY"
+                elif rsi_vals[i] > 70:
+                    rec["signal"] = "SELL"
+            
+            history.append(rec)
                 
         result["history"] = history
         result["current_price"] = prices[-1]
@@ -129,8 +137,7 @@ def analyze_symbol(symbol):
             result["rsi"] = latest_rsi
             result["sma_50"] = sma_50[-1]
             
-            # --- Estrategia ---
-            # Definir la lógica y explicación para el usuario
+            # --- Estrategia Texto (Actual) ---
             buy_reasons = []
             sell_reasons = []
             
