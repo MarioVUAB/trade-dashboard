@@ -1,94 +1,153 @@
-import yfinance as yf
-import pandas_ta as ta
-import pandas as pd
-import urllib3
+import json
+import time
+from curl_cffi import requests as cffi_requests
 
-import requests
+def calculate_sma(prices, period):
+    if len(prices) < period:
+        return [None] * len(prices)
+    sma = []
+    for i in range(len(prices)):
+        if i < period - 1:
+            sma.append(None)
+        else:
+            window = prices[i - period + 1 : i + 1]
+            sma.append(sum(window) / period)
+    return sma
 
-import requests
-try:
-    from curl_cffi import requests as cffi_requests
-except ImportError:
-    cffi_requests = None
-
-# Deshabilitar advertencias, por si acaso
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+def calculate_rsi(prices, period=14):
+    if len(prices) < period + 1:
+        return [None] * len(prices)
+    
+    rsi = [None] * len(prices)
+    deltas = [prices[i] - prices[i-1] for i in range(1, len(prices))]
+    
+    avg_gain = 0
+    avg_loss = 0
+    
+    # First Average
+    for i in range(period):
+        if deltas[i] > 0:
+            avg_gain += deltas[i]
+        else:
+            avg_loss += abs(deltas[i])
+            
+    avg_gain /= period
+    avg_loss /= period
+    
+    if avg_loss == 0:
+        rsi[period] = 100
+    else:
+        rs = avg_gain / avg_loss
+        rsi[period] = 100 - (100 / (1 + rs))
+        
+    # Smoothed Average
+    for i in range(period + 1, len(prices)):
+        delta = deltas[i-1]
+        gain = delta if delta > 0 else 0
+        loss = abs(delta) if delta < 0 else 0
+        
+        avg_gain = (avg_gain * (period - 1) + gain) / period
+        avg_loss = (avg_loss * (period - 1) + loss) / period
+        
+        if avg_loss == 0:
+            rsi[i] = 100
+        else:
+            rs = avg_gain / avg_loss
+            rsi[i] = 100 - (100 / (1 + rs))
+            
+    return rsi
 
 def analyze_symbol(symbol):
-    print(f"--- Analizando {symbol} ---")
+    print(f"--- API Fetch: {symbol} ---")
     result = {"symbol": symbol, "status": "error", "data": None, "signal": "N/A"}
     
+    # URL directa a la API de Yahoo Finance (JSON)
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?range=1y&interval=1d"
+    
     try:
-        # Intentar usar curl_cffi session si está disponible
-        # y deshabilitar SSL verify
-        if cffi_requests:
-            print("Using curl_cffi session...")
-            session = cffi_requests.Session(impersonate="chrome")
-            session.verify = False
-            ticker = yf.Ticker(symbol, session=session)
-        else:
-            print("Using default yfinance session (fallback)...")
-            ticker = yf.Ticker(symbol)
-            
-        df = ticker.history(period="1y", interval="1d")
+        # Usar curl_cffi para imitar Chrome y evitar bloqueos (incluso sin proxy en la nube ayuda)
+        session = cffi_requests.Session(impersonate="chrome")
+        session.verify = False 
         
-        if df.empty:
-            print(f"Error: No se encontraron datos para {symbol} (DataFrame vacío)")
-            result["detail"] = "No data found"
+        print(f"Fetching {url}...")
+        resp = session.get(url, timeout=10)
+        
+        if resp.status_code != 200:
+            result["detail"] = f"HTTP Error {resp.status_code}"
             return result
-
-        # Limpieza básica
-        if isinstance(df.columns, pd.MultiIndex):
-            df.columns = df.columns.get_level_values(0)
-
-        # Calcular RSI (Relative Strength Index) usa pandas_ta
-        df.ta.rsi(length=14, append=True)
-        # Calcular SMA 50 y 200
-        df.ta.sma(length=50, append=True)
-        df.ta.sma(length=200, append=True)
-
-        cols = ['Close', 'RSI_14', 'SMA_50', 'SMA_200']
-        existing_cols = [c for c in cols if c in df.columns]
-        
-        # Guardar últimos 5 registros para retorno
-        result["history"] = df[existing_cols].tail().to_dict(orient="records")
-        
-        latest_price = df['Close'].iloc[-1]
-        result["current_price"] = latest_price
-        
-        if 'RSI_14' in df.columns and not pd.isna(df['RSI_14'].iloc[-1]):
-            latest_rsi = df['RSI_14'].iloc[-1]
-            result["rsi"] = latest_rsi
-            print(f"\nPrecio Actual: {latest_price:.2f}")
-            print(f"RSI Actual: {latest_rsi:.2f}")
             
+        data_json = resp.json()
+        
+        # Parsear la estructura de Yahoo
+        try:
+            result_block = data_json["chart"]["result"][0]
+            timestamps = result_block["timestamp"]
+            quotes = result_block["indicators"]["quote"][0]
+            closes = quotes["close"]
+        except (KeyError, TypeError, IndexError):
+            result["detail"] = "Invalid data format from API"
+            return result
+            
+        # Filtrar Nones (días sin trading)
+        clean_data = []
+        for t, c in zip(timestamps, closes):
+            if c is not None:
+                clean_data.append((t, c))
+                
+        if not clean_data:
+            result["detail"] = "No valid data found"
+            return result
+            
+        # Separar para calculos
+        times = [x[0] for x in clean_data]
+        prices = [x[1] for x in clean_data]
+        
+        # Calcular Indicadores (Pure Python)
+        rsi_vals = calculate_rsi(prices)
+        sma_50 = calculate_sma(prices, 50)
+        sma_200 = calculate_sma(prices, 200)
+        
+        # Construir historial (últimos 5)
+        history = []
+        for i in range(len(prices) - 5, len(prices)):
+            if i >= 0:
+                rec = {
+                    "Date": time.strftime('%Y-%m-%d', time.localtime(times[i])),
+                    "Close": prices[i],
+                    "RSI_14": rsi_vals[i],
+                    "SMA_50": sma_50[i],
+                    "SMA_200": sma_200[i]
+                }
+                history.append(rec)
+                
+        result["history"] = history
+        result["current_price"] = prices[-1]
+        
+        latest_rsi = rsi_vals[-1]
+        
+        if latest_rsi is not None:
+            result["rsi"] = latest_rsi
             if latest_rsi < 30:
                 result["signal"] = "COMPRA"
                 result["signal_desc"] = "Sobreventa"
-                print(">> SEÑAL POTENCIAL: COMPRA (Sobreventa)")
             elif latest_rsi > 70:
-                print(">> SEÑAL POTENCIAL: VENTA (Sobrecompra)")
                 result["signal"] = "VENTA"
                 result["signal_desc"] = "Sobrecompra"
             else:
-                print(">> SEÑAL: NEUTRA (Mantener)")
                 result["signal"] = "NEUTRA"
                 result["signal_desc"] = "Mantener"
         else:
-             print(f"\nPrecio Actual: {latest_price:.2f} (Insuficientes datos para RSI)")
-             result["warning"] = "Insufficient data for RSI"
+            result["warning"] = "Insufficient data for RSI"
             
-        print("\n")
         result["status"] = "ok"
         return result
         
     except Exception as e:
-        print(f"Excepción al descargar {symbol}: {e}")
+        print(f"Exception: {e}")
         result["detail"] = str(e)
         return result
 
 if __name__ == "__main__":
-    assets = ["GOOGL", "BTC-USD"]
-    for asset in assets:
-        analyze_symbol(asset)
+    # Test local sencillo
+    print(json.dumps(analyze_symbol("BTC-USD"), indent=2))
 
