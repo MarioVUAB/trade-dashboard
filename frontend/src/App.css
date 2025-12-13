@@ -447,24 +447,30 @@
   .app-container {
     flex-direction: column;
     height: auto;
-    overflow-y: auto;
+    min-height: 100vh;
+    overflow-y: visible;
+    /* Let the page scroll naturally */
+    overflow-x: hidden;
   }
 
   .sidebar {
     width: 100%;
     height: auto;
-    max-height: 220px;
-    /* List takes top part, scrollable */
+    max-height: 180px;
+    /* Reduced height so chart appears sooner */
     border-right: none;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     flex-shrink: 0;
+    overflow-y: auto;
   }
 
   .main-content {
     width: 100%;
     padding: 1rem;
     height: auto;
-    overflow-y: visible;
+    flex: none;
+    /* Don't try to fit in flex parent, just grow */
+    overflow: visible;
   }
 
   .chart-container-wrapper {
