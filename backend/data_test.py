@@ -14,6 +14,22 @@ def calculate_sma(prices, period):
             sma.append(sum(window) / period)
     return sma
 
+def calculate_ema(data, window):
+    if len(data) < window:
+        return [None] * len(data)
+    
+    # First value is SMA
+    sma_initial = sum(data[:window]) / window
+    ema = [None] * (window - 1) + [sma_initial]
+    
+    multiplier = 2 / (window + 1)
+    
+    for i in range(window, len(data)):
+        val = (data[i] - ema[-1]) * multiplier + ema[-1]
+        ema.append(val)
+    
+    return ema
+
 def calculate_rsi(prices, period=14):
     if len(prices) < period + 1:
         return [None] * len(prices)
@@ -134,6 +150,7 @@ def analyze_symbol(symbol):
         # Calcular Indicadores (Pure Python)
         rsi_vals = calculate_rsi(prices)
         sma_50 = calculate_sma(prices, 50)
+        ema_200 = calculate_ema(prices, 200)
         # Bollinger Bands (20 periods, 2 std dev)
         sma_20 = calculate_sma(prices, 20)
         std_devs = calculate_std_dev(prices, 20, sma_20)
@@ -160,6 +177,7 @@ def analyze_symbol(symbol):
                 "volume": clean_data[i]["volume"],
                 "rsi": rsi_vals[i],
                 "sma_50": sma_50[i],
+                "ema_200": ema_200[i],
                 "upper_band": upper_band[i],
                 "lower_band": lower_band[i],
                 "signal": None
@@ -183,8 +201,10 @@ def analyze_symbol(symbol):
         latest_rsi = rsi_vals[-1]
         
         if latest_rsi is not None:
-            result["rsi"] = latest_rsi
+            result["rsi"] = rsi_vals[-1]
             result["sma_50"] = sma_50[-1]
+            result["ema_200"] = ema_200[-1] if ema_200[-1] else 0
+            result["upper_band"] = upper_band[-1]
             
             # --- Lógica Avanzada de Precios Objetivo (Trade Setup) ---
             current_price = prices[-1]

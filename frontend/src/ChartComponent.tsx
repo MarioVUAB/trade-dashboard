@@ -33,7 +33,7 @@ export const ChartComponent = ({ data, colors = {} }: ChartProps) => {
                 textColor: chartColors.textColor || '#d1d5db',
             },
             width: chartContainerRef.current.clientWidth,
-            height: 350,
+            height: chartContainerRef.current.clientHeight,
             grid: {
                 vertLines: { color: 'rgba(255, 255, 255, 0.05)' },
                 horzLines: { color: 'rgba(255, 255, 255, 0.05)' },
@@ -55,16 +55,26 @@ export const ChartComponent = ({ data, colors = {} }: ChartProps) => {
             wickDownColor: '#ef4444',
         });
 
+        // Volume Series (Histogram at bottom)
+        const volumeSeries = chart.addHistogramSeries({
+            priceFormat: {
+                type: 'volume',
+            },
+            priceScaleId: 'right', // Attach to main scale so it moves with price
+            priceLineVisible: false,
+            lastValueVisible: false, // Don't show volume numbers on price axis
+        });
+
         // Bollinger Bands (Lines)
         const upperBandSeries = chart.addLineSeries({
-            color: 'rgba(41, 98, 255, 0.5)',
+            color: 'rgba(41, 98, 255, 0.3)',
             lineWidth: 1,
             lineStyle: 2, // Dashed
             title: 'Upper Band',
         });
 
         const lowerBandSeries = chart.addLineSeries({
-            color: 'rgba(41, 98, 255, 0.5)',
+            color: 'rgba(41, 98, 255, 0.3)',
             lineWidth: 1,
             lineStyle: 2, // Dashed
             title: 'Lower Band',
@@ -76,8 +86,34 @@ export const ChartComponent = ({ data, colors = {} }: ChartProps) => {
             title: 'SMA 50',
         });
 
+        const ema200Series = chart.addLineSeries({
+            color: '#8b5cf6', // Violet/Purple
+            lineWidth: 2,
+            title: 'EMA 200 (Tendencia Macro)',
+        });
+
         // Transform Data
         const sortedData = [...data].sort((a, b) => (new Date(a.time).getTime() - new Date(b.time).getTime()));
+
+        // Calculate Range for Normalization
+        let minPrice = Infinity;
+        let maxPrice = -Infinity;
+        let maxVol = -Infinity;
+
+        for (const item of sortedData) {
+            const h = item.high ?? item.close;
+            const l = item.low ?? item.close;
+            const v = item.volume || 0;
+            if (h > maxPrice) maxPrice = h;
+            if (l < minPrice) minPrice = l;
+            if (v > maxVol) maxVol = v;
+        }
+
+        if (minPrice === Infinity) minPrice = 0;
+        if (maxPrice === -Infinity) maxPrice = 100;
+        if (maxVol === -Infinity || maxVol === 0) maxVol = 1;
+
+        const priceRange = maxPrice - minPrice;
 
         const candles = sortedData.map(item => ({
             time: item.time,
@@ -85,6 +121,14 @@ export const ChartComponent = ({ data, colors = {} }: ChartProps) => {
             high: item.high ?? item.close,
             low: item.low ?? item.close,
             close: item.close,
+        }));
+
+        // Normalize Volume to Price Scale (Overlay)
+        // Max Volume will reach 20% of the price range height, starting near the bottom.
+        const volumeData = sortedData.map(item => ({
+            time: item.time,
+            value: (minPrice - (priceRange * 0.05)) + ((item.volume || 0) / maxVol) * (priceRange * 0.45),
+            color: (item.close >= (item.open ?? item.close)) ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)',
         }));
 
         const upperData = sortedData
@@ -99,10 +143,17 @@ export const ChartComponent = ({ data, colors = {} }: ChartProps) => {
             .filter(item => item.sma_50 != null)
             .map(item => ({ time: item.time, value: item.sma_50 }));
 
+        const ema200Data = sortedData
+            .filter(item => item.ema_200 != null && item.ema_200 !== 0)
+            .map(item => ({ time: item.time, value: item.ema_200 }));
+
         candlestickSeries.setData(candles);
+        volumeSeries.setData(volumeData);
         upperBandSeries.setData(upperData);
         lowerBandSeries.setData(lowerData);
         smaSeries.setData(smaData);
+        ema200Series.setData(ema200Data);
+
 
         // Add Markers (Signals)
         const markers: any[] = [];

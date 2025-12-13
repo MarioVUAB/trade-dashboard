@@ -35,6 +35,7 @@ function getExpertAnalysis(asset: AnalysisResult) {
   const last = asset.history[asset.history.length - 1];
   const price = asset.current_price;
   const sma = asset.sma_50 || last.sma_50 || price;
+  const ema200 = last.ema_200 || sma; // Fallback to SMA if EMA200 not ready
   const upper = last.upper_band || price * 1.05;
   const lower = last.lower_band || price * 0.95;
   const rsi = asset.rsi;
@@ -42,7 +43,9 @@ function getExpertAnalysis(asset: AnalysisResult) {
 
   // 1. Determinar Tendencia
   const isBullish = price > sma;
-  const trendText = isBullish ? "ALCISTA (Subiendo)" : "BAJISTA (Bajando)";
+  const isMacroBullish = price > ema200;
+  const trendText = isBullish ? "ALCISTA (Corto Plazo)" : "BAJISTA (Corto Plazo)";
+  const macroText = isMacroBullish ? "ALCISTA (Largo Plazo)" : "BAJISTA (Largo Plazo)";
 
   let recommendation = "";
   let color = ""; // success, danger, warning
@@ -63,14 +66,14 @@ function getExpertAnalysis(asset: AnalysisResult) {
       target = price;
       stop = support * 0.97; // 3% abajo del soporte
       profit = upper;
-      analysis = `✅ **Momento Ideal:** La acción está subiendo y el volumen (${(volume / 1000).toFixed(0)}k) respalda el movimiento.\n\nEs un excelente momento para entrar antes de que vuelva a subir.`;
+      analysis = `✅ **Momento Ideal:** La acción está subiendo y el volumen (${(volume / 1000).toFixed(0)}k) respalda el movimiento.\n\nTrend Macro: ${macroText}. Es un excelente momento para entrar.`;
     } else if (rsi > 70) { // RSI alto (Sobrecompra)
       recommendation = "NO COMPRES, ESTÁ CARA";
       color = "var(--danger)"; // Rojo
       target = support;
       stop = support * 0.97;
       profit = upper * 1.05;
-      analysis = `⚠️ **Peligro:** Todo el mundo está comprando (RSI: ${rsi.toFixed(1)}) y el precio ha subido demasiado rápido. Es probable que caiga pronto.\n\nMejor espera a que se enfríe y baje cerca de $${target.toFixed(2)}.`;
+      analysis = `⚠️ **Peligro:** Todo el mundo está comprando (RSI: ${rsi.toFixed(1)}) y el precio ha subido demasiado rápido. Es probable que caiga pronto.\n\nAunque la tendencia macro es ${macroText}, es probable que caiga pronto.`;
     } else {
       // En medio
       recommendation = "ESPERAR RETROCESO";
@@ -78,7 +81,7 @@ function getExpertAnalysis(asset: AnalysisResult) {
       target = support;
       stop = support * 0.97;
       profit = upper;
-      analysis = `⏳ **Paciencia:** La tendencia es buena, pero el precio actual ($${price.toFixed(2)}) no es el mejor.\n\nLo inteligente es esperar un pequeño bajón hasta los $${target.toFixed(2)} para comprar seguro.`;
+      analysis = `⏳ **Paciencia:** La tendencia a corto plazo es buena, pero el precio actual ($${price.toFixed(2)}) no es el mejor.\n\nTrend Macro: ${macroText}. Lo inteligente es esperar un pequeño bajón.`;
     }
   } else {
     // Tendencia Bajando
@@ -89,14 +92,14 @@ function getExpertAnalysis(asset: AnalysisResult) {
       target = price;
       stop = price * 0.95;
       profit = sma; // Solo hasta la media
-      analysis = `😮 **Oportunidad Agresiva:** Ha caído tanto que podría tener un "rebote de gato muerto".\n\nEl volumen es ${(volume / 1000).toFixed(0)}k. Solo para expertos: Compra buscando una ganancia rápida.`;
+      analysis = `😮 **Oportunidad Agresiva:** Ha caído tanto que podría tener un "rebote de gato muerto".\n\nTrend Macro: ${macroText}. Solo para expertos: Compra rápida y salte si no sube.`;
     } else {
       recommendation = "NO COMPRAR / VENDER";
       color = "var(--danger)"; // Rojo
       target = lower;
       stop = lower * 0.95;
       profit = sma;
-      analysis = `⛔ **Cuidado:** La acción está perdiendo valor con volumen de ${(volume / 1000).toFixed(0)}k.\n\nSi tienes acciones, podrías vender para evitar perder más. Si quieres comprar, mejor mira otra cosa por ahora.`;
+      analysis = `⛔ **Cuidado:** La acción está perdiendo valor con volumen de ${(volume / 1000).toFixed(0)}k.\n\nTrend Macro: ${macroText}. Mejor mira otra cosa por ahora.`;
     }
   }
 
