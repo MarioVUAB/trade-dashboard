@@ -57,6 +57,19 @@ def calculate_rsi(prices, period=14):
             
     return rsi
 
+def calculate_std_dev(prices, period, sma_values):
+    if len(prices) < period:
+        return [None] * len(prices)
+    std_devs = [None] * len(prices)
+    for i in range(period - 1, len(prices)):
+        window = prices[i - period + 1 : i + 1]
+        mean = sma_values[i]
+        if mean is None: 
+            continue
+        variance = sum([(p - mean) ** 2 for p in window]) / period
+        std_devs[i] = variance ** 0.5
+    return std_devs
+
 def analyze_symbol(symbol):
     print(f"--- API Fetch: {symbol} ---")
     result = {"symbol": symbol, "status": "error", "data": None, "signal": "N/A"}
@@ -119,7 +132,19 @@ def analyze_symbol(symbol):
         # Calcular Indicadores (Pure Python)
         rsi_vals = calculate_rsi(prices)
         sma_50 = calculate_sma(prices, 50)
-        sma_200 = calculate_sma(prices, 200)
+        # Bollinger Bands (20 periods, 2 std dev)
+        sma_20 = calculate_sma(prices, 20)
+        std_devs = calculate_std_dev(prices, 20, sma_20)
+        
+        upper_band = []
+        lower_band = []
+        for i in range(len(prices)):
+            if sma_20[i] is not None and std_devs[i] is not None:
+                upper_band.append(sma_20[i] + (2 * std_devs[i]))
+                lower_band.append(sma_20[i] - (2 * std_devs[i]))
+            else:
+                upper_band.append(None)
+                lower_band.append(None)
         
         # Construir historial completo (1 año) para el gráfico
         history = []
@@ -132,16 +157,19 @@ def analyze_symbol(symbol):
                 "close": clean_data[i]["close"],
                 "rsi": rsi_vals[i],
                 "sma_50": sma_50[i],
-                "sma_200": sma_200[i],
+                "upper_band": upper_band[i],
+                "lower_band": lower_band[i],
                 "signal": None
             }
             
-            # Determinar señal histórica para el gráfico (Estrategia Semi-Agresiva)
-            # RSI < 40 (Compra), RSI > 60 (Venta) para que se vean más señales
-            if rsi_vals[i] is not None:
-                if rsi_vals[i] < 40:
+            # Determinar señal combinada (RSI + Bollinger)
+            # Compra fuerte: RSI < 40 Y Precio toca banda inferior
+            # Venta fuerte: RSI > 60 Y Precio toca banda superior
+            price = prices[i]
+            if rsi_vals[i] is not None and upper_band[i] is not None:
+                if rsi_vals[i] < 40 and price <= lower_band[i] * 1.02: # Margen del 2%
                     rec["signal"] = "BUY"
-                elif rsi_vals[i] > 60:
+                elif rsi_vals[i] > 60 and price >= upper_band[i] * 0.98: # Margen del 2%
                     rec["signal"] = "SELL"
             
             history.append(rec)
@@ -155,36 +183,42 @@ def analyze_symbol(symbol):
             result["rsi"] = latest_rsi
             result["sma_50"] = sma_50[-1]
             
-            # --- Estrategia para Principiantes (Lenguaje Natural) ---
+            # --- Estrategia para Principiantes (Lenguaje Natural Mejorado) ---
             buy_reasons = []
             sell_reasons = []
             
-            # Análisis RSI (Oscilador de momento)
-            if latest_rsi < 30:
-                buy_reasons.append("¡Oportunidad Clave! El precio ha caído exageradamente rápido. Históricamente, esto suele preceder a un rebote fuerte (Subida).")
-            elif latest_rsi < 45:
-                buy_reasons.append("El precio está 'barato' en comparación con sus movimientos recientes. Podría ser buen momento para entrar antes de que suba.")
+            curr_price = prices[-1]
+            curr_lower = lower_band[-1]
+            curr_upper = upper_band[-1]
+
+            # Análisis Bollinger
+            if curr_lower and curr_price <= curr_lower * 1.01:
+                buy_reasons.append("¡Precio REBOTANDO en el soporte! El precio ha tocado la 'Banda Inferior', lo que estadísticamente sugiere que está demasiado barato y debería subir.")
             
-            if latest_rsi > 70:
-                sell_reasons.append("¡Cuidado! El precio ha subido muy rápido y está 'caro'. Es muy probable que baje pronto para corregir.")
-            elif latest_rsi > 55:
-                sell_reasons.append("El precio está algo alto. Si ya ganaste dinero, considera vender ahora y asegurar tus ganancias.")
+            if curr_upper and curr_price >= curr_upper * 0.99:
+                sell_reasons.append("¡Techo Alcanzado! El precio está chocando con la 'Banda Superior'. Es difícil que suba más sin descansar antes.")
 
-            # Análisis Tendencia (SMA 50)
-            current_price = prices[-1]
-            if sma_50[-1]:
-                if current_price > sma_50[-1]:
-                    buy_reasons.append("La tendencia general es POSITIVA (hacia arriba). La mayoría de los inversores están comprando.")
-                elif current_price < sma_50[-1]:
-                    sell_reasons.append("La tendencia general es NEGATIVA (hacia abajo). El mercado está con miedo, el precio podría seguir cayendo.")
+            # Análisis RSI
+            if latest_rsi < 35:
+                buy_reasons.append("Además, el momentum indica que todo el mundo ha vendido demasiado (Sobreventa).")
+            elif latest_rsi > 65:
+                sell_reasons.append("Además, hay euforia en el mercado (Sobrecompra), lo cual es peligroso.")
+            
+            # Decisión Final Combinada
+            if not buy_reasons and not sell_reasons:
+                 # Si no hay extremos, mirar tendencia
+                 if sma_50[-1] and curr_price > sma_50[-1]:
+                     buy_reasons.append("Estamos en zona 'segura' y tendencia alcista, pero no es el punto más bajo. Puedes comprar, pero con precaución.")
+                 else:
+                     sell_reasons.append("Tendencia bajista y sin señales de reversión claras. Mejor esperar.")
 
-            result["strategy_buy"] = " ".join(buy_reasons) if buy_reasons else "No hay señales claras de compra por ahora. Mejor esperar, el mercado está indeciso."
-            result["strategy_sell"] = " ".join(sell_reasons) if sell_reasons else "No hay urgencia de venta. Puedes mantener tu posición si ya compraste."
-
-            # Señal Visual Simplificada
-            if latest_rsi < 40:
+            result["strategy_buy"] = " ".join(buy_reasons) 
+            result["strategy_sell"] = " ".join(sell_reasons)
+            
+            # Señal Visual Simplificada Final
+            if "soporte" in result["strategy_buy"] or latest_rsi < 35:
                 result["signal"] = "COMPRA"
-            elif latest_rsi > 60:
+            elif "Techo" in result["strategy_sell"] or latest_rsi > 65:
                 result["signal"] = "VENTA"
             else:
                 result["signal"] = "NEUTRA"
