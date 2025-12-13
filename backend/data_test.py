@@ -84,23 +84,37 @@ def analyze_symbol(symbol):
             timestamps = result_block["timestamp"]
             quotes = result_block["indicators"]["quote"][0]
             closes = quotes["close"]
+            opens = quotes.get("open", closes)
+            highs = quotes.get("high", closes)
+            lows = quotes.get("low", closes)
         except (KeyError, TypeError, IndexError):
             result["detail"] = "Invalid data format from API"
             return result
             
         # Filtrar Nones (días sin trading)
         clean_data = []
-        for t, c in zip(timestamps, closes):
+        for i in range(len(timestamps)):
+            c = closes[i]
             if c is not None:
-                clean_data.append((t, c))
+                # Use closes for missing fields if necessary (fallback)
+                o = opens[i] if opens[i] is not None else c
+                h = highs[i] if highs[i] is not None else c
+                l = lows[i] if lows[i] is not None else c
+                clean_data.append({
+                    "time": timestamps[i],
+                    "open": o,
+                    "high": h,
+                    "low": l,
+                    "close": c
+                })
                 
         if not clean_data:
             result["detail"] = "No valid data found"
             return result
             
         # Separar para calculos
-        times = [x[0] for x in clean_data]
-        prices = [x[1] for x in clean_data]
+        times = [x["time"] for x in clean_data]
+        prices = [x["close"] for x in clean_data]
         
         # Calcular Indicadores (Pure Python)
         rsi_vals = calculate_rsi(prices)
@@ -112,7 +126,10 @@ def analyze_symbol(symbol):
         for i in range(len(prices)):
             rec = {
                 "time": time.strftime('%Y-%m-%d', time.localtime(times[i])),
-                "close": prices[i],
+                "open": clean_data[i]["open"],
+                "high": clean_data[i]["high"],
+                "low": clean_data[i]["low"],
+                "close": clean_data[i]["close"],
                 "rsi": rsi_vals[i],
                 "sma_50": sma_50[i],
                 "sma_200": sma_200[i],
