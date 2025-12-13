@@ -100,6 +100,7 @@ def analyze_symbol(symbol):
             opens = quotes.get("open", closes)
             highs = quotes.get("high", closes)
             lows = quotes.get("low", closes)
+            volumes = quotes.get("volume", [0] * len(closes))
         except (KeyError, TypeError, IndexError):
             result["detail"] = "Invalid data format from API"
             return result
@@ -118,7 +119,8 @@ def analyze_symbol(symbol):
                     "open": o,
                     "high": h,
                     "low": l,
-                    "close": c
+                    "close": c,
+                    "volume": volumes[i] if volumes[i] is not None else 0
                 })
                 
         if not clean_data:
@@ -155,6 +157,7 @@ def analyze_symbol(symbol):
                 "high": clean_data[i]["high"],
                 "low": clean_data[i]["low"],
                 "close": clean_data[i]["close"],
+                "volume": clean_data[i]["volume"],
                 "rsi": rsi_vals[i],
                 "sma_50": sma_50[i],
                 "upper_band": upper_band[i],
@@ -184,6 +187,7 @@ def analyze_symbol(symbol):
             result["sma_50"] = sma_50[-1]
             
             # --- Lógica Avanzada de Precios Objetivo (Trade Setup) ---
+            current_price = prices[-1]
             
             trend = "NEUTRAL"
             if sma_50[-1]:
