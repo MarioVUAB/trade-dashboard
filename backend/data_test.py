@@ -183,45 +183,80 @@ def analyze_symbol(symbol):
             result["rsi"] = latest_rsi
             result["sma_50"] = sma_50[-1]
             
-            # --- Estrategia para Principiantes (Lenguaje Natural Mejorado) ---
-            buy_reasons = []
-            sell_reasons = []
+            # --- Lógica Avanzada de Precios Objetivo (Trade Setup) ---
             
-            curr_price = prices[-1]
-            curr_lower = lower_band[-1]
-            curr_upper = upper_band[-1]
+            trend = "NEUTRAL"
+            if sma_50[-1]:
+                if current_price > sma_50[-1]:
+                    trend = "BULLISH" # Alcista
+                else:
+                    trend = "BEARISH" # Bajista
 
-            # Análisis Bollinger
-            if curr_lower and curr_price <= curr_lower * 1.01:
-                buy_reasons.append("¡Precio REBOTANDO en el soporte! El precio ha tocado la 'Banda Inferior', lo que estadísticamente sugiere que está demasiado barato y debería subir.")
-            
-            if curr_upper and curr_price >= curr_upper * 0.99:
-                sell_reasons.append("¡Techo Alcanzado! El precio está chocando con la 'Banda Superior'. Es difícil que suba más sin descansar antes.")
+            # Definir niveles clave
+            curr_lower = lower_band[-1] if lower_band[-1] else current_price * 0.95
+            curr_upper = upper_band[-1] if upper_band[-1] else current_price * 1.05
+            curr_sma50 = sma_50[-1] if sma_50[-1] else current_price
 
-            # Análisis RSI
-            if latest_rsi < 35:
-                buy_reasons.append("Además, el momentum indica que todo el mundo ha vendido demasiado (Sobreventa).")
-            elif latest_rsi > 65:
-                sell_reasons.append("Además, hay euforia en el mercado (Sobrecompra), lo cual es peligroso.")
-            
-            # Decisión Final Combinada
-            if not buy_reasons and not sell_reasons:
-                 # Si no hay extremos, mirar tendencia
-                 if sma_50[-1] and curr_price > sma_50[-1]:
-                     buy_reasons.append("Estamos en zona 'segura' y tendencia alcista, pero no es el punto más bajo. Puedes comprar, pero con precaución.")
-                 else:
-                     sell_reasons.append("Tendencia bajista y sin señales de reversión claras. Mejor esperar.")
+            target_entry = 0.0
+            stop_loss = 0.0
+            take_profit = 0.0
+            recommendation = ""
+            analysis_text = ""
 
-            result["strategy_buy"] = " ".join(buy_reasons) 
-            result["strategy_sell"] = " ".join(sell_reasons)
+            if trend == "BULLISH":
+                # En tendencia alcista, buscamos comprar en retrocesos (Soportes: SMA50 o Banda Inferior)
+                # El mejor soporte dinámico suele ser la SMA50 o la Banda Inferior, lo que esté más cerca por debajo.
+                support_level = max(curr_sma50, curr_lower)
+                
+                if current_price <= support_level * 1.02: # Estamos cerca del soporte
+                   target_entry = current_price # Entrar YA
+                   recommendation = "COMPRAR AHORA"
+                   analysis_text = f"✅ **ACTUALIDAD:** TENDENCIA ALCISTA SÓLIDA.\n\nEl precio está rebotando en una zona clave (cerca de ${support_level:.2f}). Es el momento ideal para subirte a la tendencia."
+                else:
+                   target_entry = support_level # Esperar retroceso
+                   recommendation = "ESPERAR RETROCESO"
+                   analysis_text = f"⏳ **ACTUALIDAD:** ALCISTA PERO EXTENDIDA.\n\nLa acción es fuerte, pero ${current_price:.2f} es un poco caro para entrar ya. \n\n👉 **LA JUGADA:** Ten paciencia. Pon una orden de compra en **${target_entry:.2f}** (tu 'suelo' de seguridad). Si el precio cae ahí, compras barato."
+
+                stop_loss = target_entry * 0.96 # 4% de riesgo
+                take_profit = curr_upper # Vender en el techo (Banda Superior)
+
+            else: # BEARISH
+                # En tendencia bajista, comprar es riesgoso (Contra-tendencia / Rebote)
+                if current_price <= curr_lower * 1.01: # Toca banda inferior
+                     target_entry = current_price
+                     recommendation = "REBOTE RIESGOSO"
+                     analysis_text = f"⚠️ **ACTUALIDAD:** TENDENCIA BAJISTA.\n\nEl precio ha caído mucho y ha tocado el suelo estadístico (${curr_lower:.2f}). Podría haber un rebote rápido ('Gato Muerto'). \n\n👉 **SOLO PARA VALIENTES:** Compra buscando un rebote corto."
+                     
+                     stop_loss = current_price * 0.97
+                     take_profit = curr_sma50 # El techo suele ser la media
+                else:
+                     target_entry = curr_lower
+                     recommendation = "NO TOCAR / VENTA"
+                     analysis_text = f"⛔ **ACTUALIDAD:** TENDENCIA BAJISTA.\n\nEl precio sigue cayendo ($309) y está lejos de tocar fondo. \n\n👉 **CONSEJO:** No intentes adivinar el piso. Si tienes acciones, considera salir en rebotes. Si quieres comprar, espera a que toque **${target_entry:.2f}**."
+                     
+                     stop_loss = target_entry * 0.95
+                     take_profit = curr_sma50
+
+            # Formateo final
+            result["trade_setup"] = {
+                "recommendation": recommendation,
+                "target_entry": target_entry,
+                "stop_loss": stop_loss,
+                "take_profit": take_profit,
+                "analysis": analysis_text
+            }
             
+            # Mantener compatibilidad con frontend anterior por si acaso
+            result["strategy_buy"] = analysis_text
+            result["strategy_sell"] = f"Meta de Salida: ${take_profit:.2f} | Stop Loss: ${stop_loss:.2f}"
+
             # Señal Visual Simplificada Final
-            if "soporte" in result["strategy_buy"] or latest_rsi < 35:
+            if "COMPRAR" in recommendation or recommendation == "REBOTE RIESGOSO":
                 result["signal"] = "COMPRA"
-            elif "Techo" in result["strategy_sell"] or latest_rsi > 65:
+            elif "VENTA" in recommendation:
                 result["signal"] = "VENTA"
             else:
-                result["signal"] = "NEUTRA"
+                result["signal"] = "ESPERA" # Nueva señal neutral activa
 
         else:
             result["warning"] = "Insufficient data for RSI"
