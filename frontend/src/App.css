@@ -516,3 +516,24 @@
     font-size: 0.95rem;
   }
 }
+
+@keyframes pulse-live {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.5;
+    transform: scale(1.2);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.pulse-dot {
+  animation: pulse-live 1.5s infinite ease-in-out;
+}

@@ -137,11 +137,15 @@ function App() {
 
   // Selected Asset for Detail View
   const [timeframe, setTimeframe] = useState('1d');
+  const [isLive, setIsLive] = useState(false); // Live Mode State
   const [selectedAsset, setSelectedAsset] = useState<AnalysisResult | null>(null);
 
   // Function to fetch a single asset (used when changing timeframe)
   const fetchSingleAsset = async (symbol: string) => {
-    setLoading(true);
+    // Silent loading for live updates? Or global loading?
+    // If live, don't show full screen spinner.
+    if (!isLive) setLoading(true);
+
     try {
       const response = await fetch(`${API_URL}/analyze/${symbol}?interval=${timeframe}`);
       if (!response.ok) throw new Error('Network error');
@@ -154,7 +158,7 @@ function App() {
     } catch (err) {
       console.error(err);
     }
-    setLoading(false);
+    if (!isLive) setLoading(false);
   };
 
   useEffect(() => {
@@ -162,6 +166,17 @@ function App() {
       fetchSingleAsset(selectedAsset.symbol);
     }
   }, [timeframe]);
+
+  // Live Mode Interval
+  useEffect(() => {
+    let interval: any;
+    if (isLive && selectedAsset) {
+      interval = setInterval(() => {
+        fetchSingleAsset(selectedAsset.symbol);
+      }, 10000); // 10 seconds refresh
+    }
+    return () => clearInterval(interval);
+  }, [isLive, selectedAsset?.symbol, timeframe]);
 
 
   const fetchData = async (symbolList: string[]) => {
@@ -366,6 +381,28 @@ function App() {
                       {tf.label}
                     </button>
                   ))}
+
+                  {/* Live Toggle */}
+                  <button
+                    onClick={() => setIsLive(!isLive)}
+                    style={{
+                      padding: '0.25rem 0.75rem',
+                      borderRadius: '6px',
+                      border: '1px solid ' + (isLive ? 'var(--success)' : 'rgba(255,255,255,0.1)'),
+                      background: isLive ? 'rgba(16, 185, 129, 0.2)' : 'transparent',
+                      color: isLive ? 'var(--success)' : '#9ca3af',
+                      cursor: 'pointer',
+                      fontSize: '0.8rem',
+                      fontWeight: 'bold',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      marginLeft: '0.5rem'
+                    }}
+                  >
+                    {isLive && <span className="pulse-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--success)' }} />}
+                    LIVE
+                  </button>
                 </div>
               </div>
               <div className="header-badges">
