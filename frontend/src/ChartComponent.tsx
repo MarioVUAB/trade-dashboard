@@ -29,6 +29,7 @@ export const ChartComponent = ({ data, chartId, colors = {} }: ChartProps) => {
     // STRATEGY SERIES
     const grahamSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
     const lynchSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+    const burrySeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
 
     const prevChartIdRef = useRef<string | null>(null);
 
@@ -61,18 +62,26 @@ export const ChartComponent = ({ data, chartId, colors = {} }: ChartProps) => {
 
         // Initialize Strategy Series FIRST (Background Context)
         grahamSeriesRef.current = chart.addLineSeries({
-            color: '#059669', // Emerald 600 - The "Floor"
+            color: '#059669', // Emerald 600
             lineWidth: 2,
-            title: 'Graham Number (Valor)',
+            title: 'Suelo Buffett/Graham (Entrada)',
             crosshairMarkerVisible: true,
             lineStyle: 0 // Solid
         });
 
         lynchSeriesRef.current = chart.addLineSeries({
-            color: '#3b82f6', // Blue 500 - The "Growth Path"
+            color: '#3b82f6', // Blue 500
+            lineWidth: 2,
+            lineStyle: 0, // Solid (Camino Principal)
+            title: 'Lynch Fair Value (Crecimiento)',
+            crosshairMarkerVisible: true
+        });
+
+        burrySeriesRef.current = chart.addLineSeries({
+            color: '#ef4444', // Red 500
             lineWidth: 2,
             lineStyle: 2, // Dashed
-            title: 'Lynch Fair Value',
+            title: 'Techo Burry (Zona Burbuja)',
             crosshairMarkerVisible: true
         });
 
@@ -205,6 +214,10 @@ export const ChartComponent = ({ data, chartId, colors = {} }: ChartProps) => {
             .filter(item => item.lynch_line != null && item.lynch_line > 0)
             .map(item => ({ time: item.time, value: item.lynch_line }));
 
+        const burryData = sortedData
+            .filter(item => item.burry_line != null && item.burry_line > 0)
+            .map(item => ({ time: item.time, value: item.burry_line }));
+
         // Set Data
         if (candleSeriesRef.current) candleSeriesRef.current.setData(candles);
         if (volumeSeriesRef.current) volumeSeriesRef.current.setData(volumeData);
@@ -215,6 +228,7 @@ export const ChartComponent = ({ data, chartId, colors = {} }: ChartProps) => {
 
         if (grahamSeriesRef.current) grahamSeriesRef.current.setData(grahamData);
         if (lynchSeriesRef.current) lynchSeriesRef.current.setData(lynchData);
+        if (burrySeriesRef.current) burrySeriesRef.current.setData(burryData);
 
         // Add Markers
         const markers: any[] = [];

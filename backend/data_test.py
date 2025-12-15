@@ -116,12 +116,27 @@ def analyze_symbol(symbol, interval="1d"):
             
             # Fast info avoids full scrape sometimes
             shares_out = 0
+            growth_rate = 0.15 # Default Conservative
+            
             try:
-                shares_out = ticker.info.get("sharesOutstanding") or ticker.info.get("impliedSharesOutstanding")
+                info = ticker.info
+                shares_out = info.get("sharesOutstanding") or info.get("impliedSharesOutstanding")
+                
+                # Fetch Growth for Lynch Formula (Dynamic valuation)
+                g = info.get("earningsGrowth", None)
+                if g is None or g == 0:
+                     g = info.get("revenueGrowth", 0.15)
+                growth_rate = g
             except:
                 pass
+
             if not shares_out:
-                shares_out = 1000000 # Fallback to avoid division by zero
+                shares_out = 1000000 
+            
+            # Lynch Multiplier: "P/E should equal Growth Rate". 
+            # If Growth is 30%, Fair PE is 30.
+            # We cap it between 15 (Defensive floor) and 65 (Hyper-growth ceiling) to avoid outliers.
+            lynch_multiplier = max(15, min(growth_rate * 100, 65))
             
             # Financials (Annual)
             bs = ticker.balance_sheet
@@ -153,22 +168,33 @@ def analyze_symbol(symbol, interval="1d"):
                         eps = ni / shares_out
                         bvps = eq / shares_out
                         
-                        graham = 0
+                        graham_classic = 0
                         if eps > 0 and bvps > 0:
-                            graham = (22.5 * eps * bvps) ** 0.5
+                            graham_classic = (22.5 * eps * bvps) ** 0.5
                             
-                        lynch = eps * 15 if eps > 0 else 0
+                        # Buffett Floor (Modernized Safety for Growth Stocks)
+                        # If the company is High Growth (Lynch > 25x), we respect Earnings Power (EPS * 20) as floor.
+                        # Otherwise, we stick to strict Tangible Assets (Graham Classic).
+                        buffett_floor = eps * 20 if eps > 0 else 0
+                        graham = max(graham_classic, buffett_floor) if lynch_multiplier > 25 else graham_classic
+                            
+                        # Lynch Improved
+                        lynch = eps * lynch_multiplier if eps > 0 else 0
+                        
+                        # Burry "Bubble" Line (3x Fair Value)
+                        burry = lynch * 3 if lynch > 0 else 0
                         
                         fundamentals.append({
                             "date_ts": int(d.timestamp()),
                             "graham": float(graham),
-                            "lynch": float(lynch)
+                            "lynch": float(lynch),
+                            "burry": float(burry)
                         })
                     except Exception as e_row:
                         continue
                 
                 fundamentals.sort(key=lambda x: x["date_ts"])
-                print(f"Fundamentals Loaded: {len(fundamentals)} snapshots")
+                print(f"Fundamentals Loaded: {len(fundamentals)} snapshots (Growth Multiplier: {lynch_multiplier:.1f}x)")
                 
         except Exception as e_fund:
             print(f"Fundamentals Error: {e_fund}")
@@ -256,6 +282,7 @@ def analyze_symbol(symbol, interval="1d"):
             
             curr_graham = None
             curr_lynch = None
+            curr_burry = None
             
             if fundamentals:
                 # Avanzar puntero mientras el siguiente reporte sea del pasado/presente
@@ -265,6 +292,7 @@ def analyze_symbol(symbol, interval="1d"):
                 if current_fund_idx >= 0:
                     curr_graham = fundamentals[current_fund_idx]["graham"]
                     curr_lynch = fundamentals[current_fund_idx]["lynch"]
+                    curr_burry = fundamentals[current_fund_idx].get("burry")
 
             rec = {
                 "time": time.strftime('%Y-%m-%d', time.localtime(times[i])),
@@ -280,6 +308,7 @@ def analyze_symbol(symbol, interval="1d"):
                 "lower_band": lower_band[i],
                 "graham_number": curr_graham,
                 "lynch_line": curr_lynch,
+                "burry_line": curr_burry,
                 "signal": None
             }
             
@@ -314,6 +343,7 @@ def analyze_symbol(symbol, interval="1d"):
         # Últimos valores fundamentales conocidos
         last_graham = history[-1].get("graham_number")
         last_lynch = history[-1].get("lynch_line")
+        last_burry = history[-1].get("burry_line")
 
         # Generar 5 puntos futuros
         for i in range(1, 6):
@@ -342,6 +372,7 @@ def analyze_symbol(symbol, interval="1d"):
                 "lower_band": proj_lower,
                 "graham_number": last_graham,
                 "lynch_line": last_lynch,
+                "burry_line": last_burry,
                 "signal": None,
                 "is_projection": True # Flag para frontend
             })
