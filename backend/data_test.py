@@ -106,6 +106,67 @@ def analyze_symbol(symbol, interval="1d"):
         session = cffi_requests.Session(impersonate="chrome")
         session.verify = False 
         
+        # --- 1. Fetch Fundamentals History (Graham/Lynch) ---
+        fundamentals = []
+        try:
+            fund_url = f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{symbol}?modules=incomeStatementHistory,quarterlyIncomeStatementHistory,balanceSheetHistory,quarterlyBalanceSheetHistory,defaultKeyStatistics"
+            fund_resp = session.get(fund_url, timeout=5)
+            
+            if fund_resp.status_code == 200:
+                f_json = fund_resp.json()
+                result_q = f_json["quoteSummary"]["result"][0]
+                
+                income_stmts = result_q.get("incomeStatementHistory", {}).get("incomeStatementHistory", [])
+                balance_sheets = result_q.get("balanceSheetHistory", {}).get("balanceSheetHistory", [])
+                
+                # Shares Outstanding (Current as approximation)
+                shares_stats = result_q.get("defaultKeyStatistics", {})
+                shares_out = shares_stats.get("sharesOutstanding", {}).get("raw") or \
+                             shares_stats.get("impliedSharesOutstanding", {}).get("raw") or 1
+                             
+                raw_financials = {}
+                
+                # Map Financials by Date
+                for stmt in income_stmts:
+                    if "endDate" in stmt:
+                        d_raw = stmt["endDate"]["raw"]
+                        if d_raw not in raw_financials: raw_financials[d_raw] = {}
+                        raw_financials[d_raw]["netIncome"] = stmt.get("netIncome", {}).get("raw", 0)
+                    
+                for stmt in balance_sheets:
+                    if "endDate" in stmt:
+                        d_raw = stmt["endDate"]["raw"]
+                        # Find closest existing date or create new (Naive approach)
+                        if d_raw not in raw_financials: raw_financials[d_raw] = {}
+                        raw_financials[d_raw]["equity"] = stmt.get("totalStockholderEquity", {}).get("raw", 0)
+
+                # Calculate Metrics per Date
+                for ts, data in raw_financials.items():
+                    net_income = data.get("netIncome", 0)
+                    equity = data.get("equity", 0)
+                    
+                    eps = net_income / shares_out if shares_out else 0
+                    bvps = equity / shares_out if shares_out else 0
+                    
+                    # Graham: Sqrt(22.5 * EPS * BVPS)
+                    graham = 0
+                    if eps > 0 and bvps > 0:
+                        graham = (22.5 * eps * bvps) ** 0.5
+                        
+                    # Lynch (Fair Value Baseline): EPS * 15
+                    lynch = eps * 15 if eps > 0 else 0
+                    
+                    fundamentals.append({
+                        "date_ts": ts,
+                        "graham": graham,
+                        "lynch": lynch
+                    })
+                    
+                fundamentals.sort(key=lambda x: x["date_ts"])
+                
+        except Exception as e_fund:
+            print(f"Fundamentals Error: {e_fund}")
+
         print(f"Fetching {url}...")
         resp = session.get(url, timeout=10)
         
@@ -175,7 +236,30 @@ def analyze_symbol(symbol, interval="1d"):
         
         # Construir historial completo (1 año) para el gráfico
         history = []
+        
+        # Cache de fundamentales para optimizar el bucle
+        current_fund_idx = -1
+        
         for i in range(len(prices)):
+            # Determinar fundamentales vigentes
+            t_val = times[i]
+            
+            # Buscar el snapshot más reciente anterior a t_val
+            # Como fundamentals está ordenado, podemos avanzar el índice
+            # hasta que el SIGUIENTE sea mayor que t_val.
+            
+            curr_graham = None
+            curr_lynch = None
+            
+            if fundamentals:
+                # Avanzar puntero mientras el siguiente reporte sea del pasado/presente
+                while current_fund_idx + 1 < len(fundamentals) and fundamentals[current_fund_idx + 1]["date_ts"] <= t_val:
+                    current_fund_idx += 1
+                
+                if current_fund_idx >= 0:
+                    curr_graham = fundamentals[current_fund_idx]["graham"]
+                    curr_lynch = fundamentals[current_fund_idx]["lynch"]
+
             rec = {
                 "time": time.strftime('%Y-%m-%d', time.localtime(times[i])),
                 "open": clean_data[i]["open"],
@@ -188,6 +272,8 @@ def analyze_symbol(symbol, interval="1d"):
                 "ema_200": ema_200[i],
                 "upper_band": upper_band[i],
                 "lower_band": lower_band[i],
+                "graham_number": curr_graham,
+                "lynch_line": curr_lynch,
                 "signal": None
             }
             
@@ -218,6 +304,10 @@ def analyze_symbol(symbol, interval="1d"):
             last_width = upper_band[-1] - lower_band[-1]
             
         last_sma_val = sma_20[-1] if sma_20[-1] else prices[-1]
+        
+        # Últimos valores fundamentales conocidos
+        last_graham = history[-1].get("graham_number")
+        last_lynch = history[-1].get("lynch_line")
 
         # Generar 5 puntos futuros
         for i in range(1, 6):
@@ -244,6 +334,8 @@ def analyze_symbol(symbol, interval="1d"):
                 "ema_200": None,
                 "upper_band": proj_upper,
                 "lower_band": proj_lower,
+                "graham_number": last_graham,
+                "lynch_line": last_lynch,
                 "signal": None,
                 "is_projection": True # Flag para frontend
             })

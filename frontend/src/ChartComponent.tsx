@@ -26,11 +26,15 @@ export const ChartComponent = ({ data, chartId, colors = {} }: ChartProps) => {
     const smaSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
     const emaSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
 
+    // STRATEGY SERIES
+    const grahamSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+    const lynchSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+
     const prevChartIdRef = useRef<string | null>(null);
 
     const colorsString = JSON.stringify(colors);
 
-    // 1. Initialize Chart (Run once or on color change/resize)
+    // 1. Initialize Chart (Run once or on color change)
     useEffect(() => {
         if (!chartContainerRef.current) return;
 
@@ -55,7 +59,24 @@ export const ChartComponent = ({ data, chartId, colors = {} }: ChartProps) => {
             },
         });
 
-        // Initialize Series
+        // Initialize Strategy Series FIRST (Background Context)
+        grahamSeriesRef.current = chart.addLineSeries({
+            color: '#059669', // Emerald 600 - The "Floor"
+            lineWidth: 2,
+            title: 'Graham Number (Valor)',
+            crosshairMarkerVisible: true,
+            lineStyle: 0 // Solid
+        });
+
+        lynchSeriesRef.current = chart.addLineSeries({
+            color: '#3b82f6', // Blue 500 - The "Growth Path"
+            lineWidth: 2,
+            lineStyle: 2, // Dashed
+            title: 'Lynch Fair Value',
+            crosshairMarkerVisible: true
+        });
+
+        // Initialize Technical Series
         candleSeriesRef.current = chart.addCandlestickSeries({
             upColor: '#10b981',
             downColor: '#ef4444',
@@ -94,7 +115,7 @@ export const ChartComponent = ({ data, chartId, colors = {} }: ChartProps) => {
         emaSeriesRef.current = chart.addLineSeries({
             color: '#8b5cf6',
             lineWidth: 2,
-            title: 'EMA 200 (Tendencia Macro)',
+            title: 'EMA 200 (Tendencia)',
         });
 
         chartRef.current = chart;
@@ -107,7 +128,6 @@ export const ChartComponent = ({ data, chartId, colors = {} }: ChartProps) => {
 
         window.addEventListener('resize', handleResize);
 
-        // Force reset the ID tracker on chart recreation so next data update fits content
         prevChartIdRef.current = null;
 
         return () => {
@@ -117,14 +137,13 @@ export const ChartComponent = ({ data, chartId, colors = {} }: ChartProps) => {
         };
     }, [colorsString]);
 
-    // 2. Update Data (Run on data change)
+    // 2. Update Data
     useEffect(() => {
         if (!data || data.length === 0 || !chartRef.current) return;
 
-        // Transform Data
         const sortedData = [...data].sort((a, b) => (new Date(a.time).getTime() - new Date(b.time).getTime()));
 
-        // Calculate Range for Normalization
+        // Calculate Range
         let minPrice = Infinity;
         let maxPrice = -Infinity;
         let maxVol = -Infinity;
@@ -160,6 +179,7 @@ export const ChartComponent = ({ data, chartId, colors = {} }: ChartProps) => {
             color: (item.close >= (item.open ?? item.close)) ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)',
         }));
 
+        // Technicals
         const upperData = sortedData
             .filter(item => item.upper_band != null)
             .map(item => ({ time: item.time, value: item.upper_band }));
@@ -176,13 +196,25 @@ export const ChartComponent = ({ data, chartId, colors = {} }: ChartProps) => {
             .filter(item => item.ema_200 != null && item.ema_200 !== 0)
             .map(item => ({ time: item.time, value: item.ema_200 }));
 
-        // Set Data to Series
+        // Fundamentals (Strategy Lines)
+        const grahamData = sortedData
+            .filter(item => item.graham_number != null && item.graham_number > 0)
+            .map(item => ({ time: item.time, value: item.graham_number }));
+
+        const lynchData = sortedData
+            .filter(item => item.lynch_line != null && item.lynch_line > 0)
+            .map(item => ({ time: item.time, value: item.lynch_line }));
+
+        // Set Data
         if (candleSeriesRef.current) candleSeriesRef.current.setData(candles);
         if (volumeSeriesRef.current) volumeSeriesRef.current.setData(volumeData);
         if (upperSeriesRef.current) upperSeriesRef.current.setData(upperData);
         if (lowerSeriesRef.current) lowerSeriesRef.current.setData(lowerData);
         if (smaSeriesRef.current) smaSeriesRef.current.setData(smaData);
         if (emaSeriesRef.current) emaSeriesRef.current.setData(ema200Data);
+
+        if (grahamSeriesRef.current) grahamSeriesRef.current.setData(grahamData);
+        if (lynchSeriesRef.current) lynchSeriesRef.current.setData(lynchData);
 
         // Add Markers
         const markers: any[] = [];
@@ -209,9 +241,7 @@ export const ChartComponent = ({ data, chartId, colors = {} }: ChartProps) => {
         }
         if (candleSeriesRef.current) candleSeriesRef.current.setMarkers(markers);
 
-        // INTELLIGENT ZOOM CONTROL
-        // Only reset zoom (fitContent) if the Chart ID has changed.
-        // If ID matches previous render, this is just a data update (live refresh) -> PRESERVE ZOOM.
+        // Update Zoom
         if (prevChartIdRef.current !== chartId && candles.length > 0) {
             chartRef.current.timeScale().fitContent();
             prevChartIdRef.current = chartId;
