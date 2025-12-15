@@ -2,6 +2,8 @@ import json
 import time
 from datetime import datetime, timedelta
 from curl_cffi import requests as cffi_requests
+import yfinance as yf
+import pandas as pd
 
 def calculate_sma(prices, period):
     if len(prices) < period:
@@ -106,63 +108,67 @@ def analyze_symbol(symbol, interval="1d"):
         session = cffi_requests.Session(impersonate="chrome")
         session.verify = False 
         
-        # --- 1. Fetch Fundamentals History (Graham/Lynch) ---
+        # --- 1. Fetch Fundamentals History (Graham/Lynch) via yfinance ---
         fundamentals = []
         try:
-            fund_url = f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{symbol}?modules=incomeStatementHistory,quarterlyIncomeStatementHistory,balanceSheetHistory,quarterlyBalanceSheetHistory,defaultKeyStatistics"
-            fund_resp = session.get(fund_url, timeout=5)
+            # Use yfinance only for fundamentals as it handles cookies/crumbs automatically
+            ticker = yf.Ticker(symbol)
             
-            if fund_resp.status_code == 200:
-                f_json = fund_resp.json()
-                result_q = f_json["quoteSummary"]["result"][0]
-                
-                income_stmts = result_q.get("incomeStatementHistory", {}).get("incomeStatementHistory", [])
-                balance_sheets = result_q.get("balanceSheetHistory", {}).get("balanceSheetHistory", [])
-                
-                # Shares Outstanding (Current as approximation)
-                shares_stats = result_q.get("defaultKeyStatistics", {})
-                shares_out = shares_stats.get("sharesOutstanding", {}).get("raw") or \
-                             shares_stats.get("impliedSharesOutstanding", {}).get("raw") or 1
-                             
-                raw_financials = {}
-                
-                # Map Financials by Date
-                for stmt in income_stmts:
-                    if "endDate" in stmt:
-                        d_raw = stmt["endDate"]["raw"]
-                        if d_raw not in raw_financials: raw_financials[d_raw] = {}
-                        raw_financials[d_raw]["netIncome"] = stmt.get("netIncome", {}).get("raw", 0)
-                    
-                for stmt in balance_sheets:
-                    if "endDate" in stmt:
-                        d_raw = stmt["endDate"]["raw"]
-                        # Find closest existing date or create new (Naive approach)
-                        if d_raw not in raw_financials: raw_financials[d_raw] = {}
-                        raw_financials[d_raw]["equity"] = stmt.get("totalStockholderEquity", {}).get("raw", 0)
-
-                # Calculate Metrics per Date
-                for ts, data in raw_financials.items():
-                    net_income = data.get("netIncome", 0)
-                    equity = data.get("equity", 0)
-                    
-                    eps = net_income / shares_out if shares_out else 0
-                    bvps = equity / shares_out if shares_out else 0
-                    
-                    # Graham: Sqrt(22.5 * EPS * BVPS)
-                    graham = 0
-                    if eps > 0 and bvps > 0:
-                        graham = (22.5 * eps * bvps) ** 0.5
+            # Fast info avoids full scrape sometimes
+            shares_out = 0
+            try:
+                shares_out = ticker.info.get("sharesOutstanding") or ticker.info.get("impliedSharesOutstanding")
+            except:
+                pass
+            if not shares_out:
+                shares_out = 1000000 # Fallback to avoid division by zero
+            
+            # Financials (Annual)
+            bs = ticker.balance_sheet
+            inc = ticker.income_stmt
+            
+            if not bs.empty:
+                # Iterate over columns (dates)
+                for d in bs.columns:
+                    try:
+                        # Net Income search
+                        ni = 0
+                        if not inc.empty:
+                             # Try to match nearest date column in income stmt if not exact match?
+                             # Usually annual reports match dates.
+                             if d in inc.columns:
+                                 col_inc = inc[d]
+                                 if "Net Income" in col_inc: ni = col_inc["Net Income"]
+                                 elif "Net Income Common Stockholders" in col_inc: ni = col_inc["Net Income Common Stockholders"]
                         
-                    # Lynch (Fair Value Baseline): EPS * 15
-                    lynch = eps * 15 if eps > 0 else 0
-                    
-                    fundamentals.append({
-                        "date_ts": ts,
-                        "graham": graham,
-                        "lynch": lynch
-                    })
-                    
+                        # Equity search
+                        eq = 0
+                        col_bs = bs[d]
+                        if "Stockholders Equity" in col_bs: eq = col_bs["Stockholders Equity"]
+                        elif "Total Stockholder Equity" in col_bs: eq = col_bs["Total Stockholder Equity"]
+                        
+                        if pd.isna(ni): ni = 0
+                        if pd.isna(eq): eq = 0
+                        
+                        eps = ni / shares_out
+                        bvps = eq / shares_out
+                        
+                        graham = 0
+                        if eps > 0 and bvps > 0:
+                            graham = (22.5 * eps * bvps) ** 0.5
+                            
+                        lynch = eps * 15 if eps > 0 else 0
+                        
+                        fundamentals.append({
+                            "date_ts": int(d.timestamp()),
+                            "graham": float(graham),
+                            "lynch": float(lynch)
+                        })
+                    except Exception as e_row:
+                        continue
+                
                 fundamentals.sort(key=lambda x: x["date_ts"])
+                print(f"Fundamentals Loaded: {len(fundamentals)} snapshots")
                 
         except Exception as e_fund:
             print(f"Fundamentals Error: {e_fund}")
