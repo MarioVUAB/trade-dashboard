@@ -87,12 +87,19 @@ def calculate_std_dev(prices, period, sma_values):
         std_devs[i] = variance ** 0.5
     return std_devs
 
-def analyze_symbol(symbol):
-    print(f"--- API Fetch: {symbol} ---")
+def analyze_symbol(symbol, interval="1d"):
+    print(f"--- API Fetch: {symbol} [Interval: {interval}] ---")
     result = {"symbol": symbol, "status": "error", "data": None, "signal": "N/A"}
     
+    # Determinar rango adecuado según el intervalo para asegurar suficientes datos para EMA 200
+    range_val = "2y" # Default para 1d
+    if interval == "1wk":
+        range_val = "5y"
+    elif interval == "1mo":
+        range_val = "10y"
+    
     # URL directa a la API de Yahoo Finance (JSON)
-    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?range=1y&interval=1d"
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?range={range_val}&interval={interval}"
     
     try:
         # Usar curl_cffi para imitar Chrome y evitar bloqueos (incluso sin proxy en la nube ayuda)

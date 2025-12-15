@@ -17,6 +17,6 @@ def read_root():
     return {"message": "Trade Dashboard API is running"}
 
 @app.get("/analyze/{symbol}")
-def get_analysis(symbol: str):
-    data = analyze_symbol(symbol)
+def get_analysis(symbol: str, interval: str = "1d"):
+    data = analyze_symbol(symbol, interval)
     return data

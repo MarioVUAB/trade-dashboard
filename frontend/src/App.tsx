@@ -123,24 +123,44 @@ function App() {
   const [searchTerm, setSearchTerm] = useState('');
 
   // Selected Asset for Detail View
+  const [timeframe, setTimeframe] = useState('1d');
   const [selectedAsset, setSelectedAsset] = useState<AnalysisResult | null>(null);
+
+  // Function to fetch a single asset (used when changing timeframe)
+  const fetchSingleAsset = async (symbol: string) => {
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/analyze/${symbol}?interval=${timeframe}`);
+      if (!response.ok) throw new Error('Network error');
+      const jsonData = await response.json();
+      const newResult = { ...jsonData, symbol };
+
+      // Update in list
+      setData(prev => prev.map(item => item.symbol === symbol ? newResult : item));
+      setSelectedAsset(newResult);
+    } catch (err) {
+      console.error(err);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    if (selectedAsset) {
+      fetchSingleAsset(selectedAsset.symbol);
+    }
+  }, [timeframe]);
+
 
   const fetchData = async (symbolList: string[]) => {
     setLoading(true);
     const results: AnalysisResult[] = [];
 
-    // Fetch in parallel for speed in this demo, but sequential to avoid rate limits if many
-    // Let's do batches or just simple Promise.all if list is small. 
-    // Given Yahoo rate limits, sequential is safer or small batches.
-
-    // Using a map to update state progressively could be nice, but simple replacement is fine.
-
-    for (const symbol of symbolList) {
+    const fetchItem = async (symbol: string) => {
       try {
-        const response = await fetch(`${API_URL}/analyze/${symbol}`);
+        const response = await fetch(`${API_URL}/analyze/${symbol}?interval=${timeframe}`);
         if (!response.ok) throw new Error('Network error');
         const jsonData = await response.json();
-        results.push({ ...jsonData, symbol });
+        return { ...jsonData, symbol };
       } catch (err) {
         console.error(`Error fetching ${symbol}:`, err);
         results.push({
@@ -150,12 +170,18 @@ function App() {
           sma_50: 0,
           signal: 'HOLD',
           error: 'Failed to fetch'
-        });
+        } as unknown as AnalysisResult); // Cast for safety
       }
     }
+
+    // Execute sequentially to be nice to API
+    for (const sym of symbolList) {
+      const res = await fetchItem(sym);
+      if (res) results.push(res);
+    }
+
     setData(results);
 
-    // If an asset was selected, update its data reference
     if (selectedAsset) {
       const updated = results.find(r => r.symbol === selectedAsset.symbol);
       if (updated) setSelectedAsset(updated);
@@ -305,6 +331,29 @@ function App() {
                 <span className="last-updated-text">
                   Updated: {lastUpdated?.toLocaleTimeString()}
                 </span>
+
+                {/* Timeframe Selector */}
+                <div style={{ display: 'flex', gap: '0.25rem', marginTop: '0.5rem' }}>
+                  {[{ id: '1d', label: '1D' }, { id: '1wk', label: '1S' }, { id: '1mo', label: '1M' }].map((tf) => (
+                    <button
+                      key={tf.id}
+                      onClick={() => setTimeframe(tf.id)}
+                      style={{
+                        padding: '0.25rem 0.75rem',
+                        borderRadius: '6px',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        background: timeframe === tf.id ? 'var(--accent-primary)' : 'transparent',
+                        color: timeframe === tf.id ? 'white' : '#9ca3af',
+                        cursor: 'pointer',
+                        fontSize: '0.8rem',
+                        transition: 'all 0.2s',
+                        fontWeight: '600'
+                      }}
+                    >
+                      {tf.label}
+                    </button>
+                  ))}
+                </div>
               </div>
               <div className="header-badges">
                 <div className="badge-large" style={{ backgroundColor: getSignalColor(selectedAsset.signal) }}>
