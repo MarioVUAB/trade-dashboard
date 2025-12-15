@@ -421,6 +421,35 @@ def analyze_symbol(symbol, interval="1d"):
                 "analysis": analysis_text
             }
             
+            # --- CÁLCULO BUFFETT (Calidad) ---
+            buffett_certified = False
+            try:
+                # Re-check info for quality metrics
+                t_check = yf.Ticker(symbol)
+                # Fast caching usually applies
+                info = t_check.info
+                
+                roe = info.get("returnOnEquity", 0)
+                debt_eq = info.get("debtToEquity", 0)
+                
+                # ROE > 15% (0.15) and Debt < 200% (2.0 ratio)
+                # Handle None values
+                if roe is None: roe = 0
+                if debt_eq is None: debt_eq = 0
+                
+                if roe > 0.15 and debt_eq < 200: 
+                    buffett_certified = True
+            except:
+                pass
+            result["buffett_certified"] = buffett_certified
+
+            # --- CÁLCULO BURRY (Riesgo Extremo) ---
+            last_lynch = history[-1].get("lynch_line", 0) or 0
+            burry_risk = False
+            if last_lynch > 0 and current_price > (last_lynch * 3):
+                burry_risk = True
+            result["burry_risk"] = burry_risk
+            
             # Mantener compatibilidad con frontend anterior por si acaso
             result["strategy_buy"] = analysis_text
             result["strategy_sell"] = f"Meta de Salida: ${take_profit:.2f} | Stop Loss: ${stop_loss:.2f}"
