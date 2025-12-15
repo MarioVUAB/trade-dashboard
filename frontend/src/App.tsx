@@ -415,35 +415,15 @@ function App() {
             </header>
 
             <div className="chart-container-wrapper">
-              {/* GURU BADGES */}
-              <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
-                {selectedAsset.buffett_certified && (
-                  <div style={{
-                    background: 'linear-gradient(135deg, #FFD700 0%, #B8860B 100%)',
-                    color: '#000', padding: '0.4rem 0.8rem', borderRadius: '6px',
-                    fontSize: '0.9rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '0.5rem',
-                    boxShadow: '0 0 15px rgba(255, 215, 0, 0.2)'
-                  }}>
-                    💎 CERTIFICADO BUFFETT
-                  </div>
-                )}
-                {selectedAsset.burry_risk && (
-                  <div className="pulse-dot" style={{
-                    background: 'rgba(239, 68, 68, 0.15)',
-                    border: '1px solid #ef4444',
-                    color: '#fa8072', padding: '0.4rem 0.8rem', borderRadius: '6px',
-                    fontSize: '0.9rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '0.5rem',
-                    animation: 'none' // Override pulse-dot standard animation if needed, but keeping it is cool
-                  }}>
-                    ⚠️ ALERTA BURRY (SOBREVALORADO)
-                  </div>
-                )}
-              </div>
+              {/* GURU BADGES - VISUALIZED INSIDE CHART NOW */}
 
               {selectedAsset.history && selectedAsset.history.length > 0 ? (
                 <ChartComponent
                   data={selectedAsset.history}
                   chartId={`${selectedAsset.symbol}-${timeframe}`}
+                  tradeSetup={selectedAsset.trade_setup}
+                  isBuffett={selectedAsset.buffett_certified}
+                  isBurry={selectedAsset.burry_risk}
                   colors={{
                     lineColor: ['BUY', 'COMPRA'].includes(selectedAsset.signal) ? '#10b981' :
                       ['SELL', 'VENTA'].includes(selectedAsset.signal) ? '#ef4444' : '#a1a1aa',

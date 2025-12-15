@@ -12,11 +12,18 @@ interface ChartProps {
         areaTopColor?: string;
         areaBottomColor?: string;
     };
+    tradeSetup?: {
+        target_entry: number;
+        take_profit: number;
+    };
+    isBuffett?: boolean;
+    isBurry?: boolean;
 }
 
-export const ChartComponent = ({ data, chartId, colors = {} }: ChartProps) => {
+export const ChartComponent = ({ data, chartId, colors = {}, tradeSetup, isBuffett, isBurry }: ChartProps) => {
     const chartContainerRef = useRef<HTMLDivElement>(null);
     const chartRef = useRef<IChartApi | null>(null);
+    const priceLinesRef = useRef<any[]>([]); // To manage horizontal lines
 
     // Refs for Series
     const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
@@ -27,7 +34,7 @@ export const ChartComponent = ({ data, chartId, colors = {} }: ChartProps) => {
     const emaSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
 
     // STRATEGY SERIES
-    const grahamSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+    const grahamSeriesRef = useRef<ISeriesApi<"Area"> | null>(null);
     const lynchSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
     const burrySeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
 
@@ -58,15 +65,26 @@ export const ChartComponent = ({ data, chartId, colors = {} }: ChartProps) => {
             rightPriceScale: {
                 borderColor: 'rgba(255, 255, 255, 0.1)',
             },
+            watermark: {
+                visible: !!isBuffett,
+                color: 'rgba(255, 215, 0, 0.15)',
+                text: '💎 BUFFETT QUALITY',
+                fontSize: 48,
+                horzAlign: 'center',
+                vertAlign: 'center',
+            },
         });
 
         // Initialize Strategy Series FIRST (Background Context)
-        grahamSeriesRef.current = chart.addLineSeries({
-            color: '#059669', // Emerald 600
+        // Graham is now an AREA to visualize the 'Safety Zone'
+        grahamSeriesRef.current = chart.addAreaSeries({
+            topColor: 'rgba(16, 185, 129, 0.2)', // Emerald tint
+            bottomColor: 'rgba(16, 185, 129, 0.05)',
+            lineColor: 'rgba(16, 185, 129, 1)',
             lineWidth: 2,
-            title: 'Suelo Buffett/Graham (Entrada)',
+            title: 'Suelo Buffett/Graham (Zona Valor)',
             crosshairMarkerVisible: true,
-            lineStyle: 0 // Solid
+            lineStyle: 0
         });
 
         lynchSeriesRef.current = chart.addLineSeries({
@@ -255,13 +273,45 @@ export const ChartComponent = ({ data, chartId, colors = {} }: ChartProps) => {
         }
         if (candleSeriesRef.current) candleSeriesRef.current.setMarkers(markers);
 
+        // Update Price Lines (Liquidity Zones)
+        if (candleSeriesRef.current) {
+            // Clear old lines
+            priceLinesRef.current.forEach(l => candleSeriesRef.current?.removePriceLine(l));
+            priceLinesRef.current = [];
+
+            if (tradeSetup) {
+                if (tradeSetup.target_entry > 0) {
+                    const l = candleSeriesRef.current.createPriceLine({
+                        price: tradeSetup.target_entry,
+                        color: '#10b981',
+                        lineWidth: 2,
+                        lineStyle: 0, // Solid
+                        axisLabelVisible: true,
+                        title: 'ZONA COMPRA (Soporte)',
+                    });
+                    priceLinesRef.current.push(l);
+                }
+                if (tradeSetup.take_profit > 0) {
+                    const l = candleSeriesRef.current.createPriceLine({
+                        price: tradeSetup.take_profit,
+                        color: '#ef4444',
+                        lineWidth: 2,
+                        lineStyle: 0,
+                        axisLabelVisible: true,
+                        title: 'ZONA VENTA (Resistencia)',
+                    });
+                    priceLinesRef.current.push(l);
+                }
+            }
+        }
+
         // Update Zoom
         if (prevChartIdRef.current !== chartId && candles.length > 0) {
             chartRef.current.timeScale().fitContent();
             prevChartIdRef.current = chartId;
         }
 
-    }, [data, chartId]);
+    }, [data, chartId, tradeSetup, isBuffett, isBurry]);
 
     return (
         <div ref={chartContainerRef} style={{ width: '100%', position: 'relative' }} />
