@@ -1,5 +1,6 @@
 import json
 import time
+from datetime import datetime, timedelta
 from curl_cffi import requests as cffi_requests
 
 def calculate_sma(prices, period):
@@ -194,7 +195,52 @@ def analyze_symbol(symbol):
                     rec["signal"] = "SELL"
             
             history.append(rec)
-                
+
+        # --- PROYECCIÓN A FUTURO (5 Días) ---
+        # Proyectamos las bandas para visualizar posibles movimientos
+        last_time = times[-1]
+        
+        # Calcular pendiente de la media (Tendencia de corto plazo)
+        slope_sma = 0
+        if sma_20[-1] and sma_20[-5]:
+            slope_sma = (sma_20[-1] - sma_20[-5]) / 5
+            
+        # Calcular ancho actual de bandas (Volatilidad)
+        last_width = 0
+        if upper_band[-1] and lower_band[-1]:
+            last_width = upper_band[-1] - lower_band[-1]
+            
+        last_sma_val = sma_20[-1] if sma_20[-1] else prices[-1]
+
+        # Generar 5 puntos futuros
+        for i in range(1, 6):
+            future_time = last_time + (i * 86400) # +1 día en segundos
+            
+            # Proyección lineal simple
+            proj_sma = last_sma_val + (slope_sma * i)
+            proj_upper = proj_sma + (last_width / 2)
+            proj_lower = proj_sma - (last_width / 2)
+            
+            # Formato de fecha
+            date_str = time.strftime('%Y-%m-%d', time.localtime(future_time))
+            
+            # Añadir entry "fantasma" solo con indicadores
+            history.append({
+                "time": date_str,
+                "open": None,
+                "high": None,
+                "low": None,
+                "close": None,
+                "volume": 0,
+                "rsi": None,
+                "sma_50": None, # Podríamos proyectar también, pero dejemos solo bandas por hoy
+                "ema_200": None,
+                "upper_band": proj_upper,
+                "lower_band": proj_lower,
+                "signal": None,
+                "is_projection": True # Flag para frontend
+            })
+
         result["history"] = history
         result["current_price"] = prices[-1]
         

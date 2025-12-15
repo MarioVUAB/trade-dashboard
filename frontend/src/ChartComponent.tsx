@@ -115,13 +115,15 @@ export const ChartComponent = ({ data, colors = {} }: ChartProps) => {
 
         const priceRange = maxPrice - minPrice;
 
-        const candles = sortedData.map(item => ({
-            time: item.time,
-            open: item.open ?? item.close,
-            high: item.high ?? item.close,
-            low: item.low ?? item.close,
-            close: item.close,
-        }));
+        const candles = sortedData
+            .filter(item => item.close != null) // Filter out projections
+            .map(item => ({
+                time: item.time,
+                open: item.open ?? item.close,
+                high: item.high ?? item.close,
+                low: item.low ?? item.close,
+                close: item.close,
+            }));
 
         // Normalize Volume to Price Scale (Overlay)
         // Max Volume will reach 20% of the price range height, starting near the bottom.
