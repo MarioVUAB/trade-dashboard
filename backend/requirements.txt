@@ -1,3 +1,5 @@
 fastapi
 uvicorn
 curl_cffi
+yfinance
+pandas
