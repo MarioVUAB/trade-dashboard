@@ -1,8 +1,10 @@
 import { useEffect, useRef } from 'react';
-import { createChart, ColorType, IChartApi, ISeriesApi } from 'lightweight-charts';
+import { createChart, ColorType } from 'lightweight-charts';
+import type { IChartApi, ISeriesApi } from 'lightweight-charts';
 
 interface ChartProps {
     data: any[];
+    chartId: string;
     colors?: {
         backgroundColor?: string;
         lineColor?: string;
@@ -12,7 +14,7 @@ interface ChartProps {
     };
 }
 
-export const ChartComponent = ({ data, colors = {} }: ChartProps) => {
+export const ChartComponent = ({ data, chartId, colors = {} }: ChartProps) => {
     const chartContainerRef = useRef<HTMLDivElement>(null);
     const chartRef = useRef<IChartApi | null>(null);
 
@@ -24,11 +26,11 @@ export const ChartComponent = ({ data, colors = {} }: ChartProps) => {
     const smaSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
     const emaSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
 
-    const isFirstLoad = useRef(true);
+    const prevChartIdRef = useRef<string | null>(null);
 
     const colorsString = JSON.stringify(colors);
 
-    // 1. Initialize Chart (Run once or on color change)
+    // 1. Initialize Chart (Run once or on color change/resize)
     useEffect(() => {
         if (!chartContainerRef.current) return;
 
@@ -105,15 +107,15 @@ export const ChartComponent = ({ data, colors = {} }: ChartProps) => {
 
         window.addEventListener('resize', handleResize);
 
-        // Reset first load flag when chart is recreated
-        isFirstLoad.current = true;
+        // Force reset the ID tracker on chart recreation so next data update fits content
+        prevChartIdRef.current = null;
 
         return () => {
             window.removeEventListener('resize', handleResize);
             chart.remove();
             chartRef.current = null;
         };
-    }, [colorsString]); // Re-create only if colors change
+    }, [colorsString]);
 
     // 2. Update Data (Run on data change)
     useEffect(() => {
@@ -207,13 +209,15 @@ export const ChartComponent = ({ data, colors = {} }: ChartProps) => {
         }
         if (candleSeriesRef.current) candleSeriesRef.current.setMarkers(markers);
 
-        // Only fit content on first load to prevent zoom reset on live updates
-        if (isFirstLoad.current && candles.length > 0) {
+        // INTELLIGENT ZOOM CONTROL
+        // Only reset zoom (fitContent) if the Chart ID has changed.
+        // If ID matches previous render, this is just a data update (live refresh) -> PRESERVE ZOOM.
+        if (prevChartIdRef.current !== chartId && candles.length > 0) {
             chartRef.current.timeScale().fitContent();
-            isFirstLoad.current = false;
+            prevChartIdRef.current = chartId;
         }
 
-    }, [data]);
+    }, [data, chartId]);
 
     return (
         <div ref={chartContainerRef} style={{ width: '100%', position: 'relative' }} />

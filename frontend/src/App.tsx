@@ -416,6 +416,7 @@ function App() {
               {selectedAsset.history && selectedAsset.history.length > 0 ? (
                 <ChartComponent
                   data={selectedAsset.history}
+                  chartId={`${selectedAsset.symbol}-${timeframe}`}
                   colors={{
                     lineColor: ['BUY', 'COMPRA'].includes(selectedAsset.signal) ? '#10b981' :
                       ['SELL', 'VENTA'].includes(selectedAsset.signal) ? '#ef4444' : '#a1a1aa',
