@@ -24,6 +24,19 @@ interface AnalysisResult {
     take_profit: number;
     analysis: string;
   };
+  news?: {
+    title: string;
+    publisher: string;
+    link: string;
+    time: number;
+  }[];
+  recommendations?: {
+    strongBuy: number;
+    buy: number;
+    hold: number;
+    sell: number;
+    strongSell: number;
+  };
 }
 
 function getExpertAnalysis(asset: AnalysisResult) {
@@ -467,6 +480,75 @@ function App() {
                 );
               })()}
             </div>
+
+            {/* INSTITUTIONAL RATINGS SECTION */}
+            {selectedAsset.recommendations && (
+              <div style={{ marginTop: '2rem' }}>
+                <h3 style={{ fontSize: '1.25rem', marginBottom: '1rem', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '0.5rem', color: '#e5e7eb' }}>
+                  OPINIÓN INSTITUCIONAL (WALL STREET)
+                </h3>
+                <div style={{ background: 'rgba(255,255,255,0.03)', padding: '1.5rem', borderRadius: '12px' }}>
+                  <div style={{ marginBottom: '0.5rem', fontSize: '0.9rem', color: '#d1d5db' }}>
+                    Consenso de Analistas
+                  </div>
+                  <div style={{ display: 'flex', height: '12px', borderRadius: '6px', overflow: 'hidden', marginBottom: '0.75rem', background: '#333' }}>
+                    {(() => {
+                      const r = selectedAsset.recommendations;
+                      if (!r) return null;
+                      const total = (r.strongBuy + r.buy + r.hold + r.sell + r.strongSell) || 1;
+                      return (
+                        <>
+                          <div style={{ width: `${(r.strongBuy / total) * 100}%`, background: '#15803d' }} title={`Strong Buy: ${r.strongBuy}`} />
+                          <div style={{ width: `${(r.buy / total) * 100}%`, background: '#22c55e' }} title={`Buy: ${r.buy}`} />
+                          <div style={{ width: `${(r.hold / total) * 100}%`, background: '#eab308' }} title={`Hold: ${r.hold}`} />
+                          <div style={{ width: `${(r.sell / total) * 100}%`, background: '#f97316' }} title={`Sell: ${r.sell}`} />
+                          <div style={{ width: `${(r.strongSell / total) * 100}%`, background: '#ef4444' }} title={`Strong Sell: ${r.strongSell}`} />
+                        </>
+                      )
+                    })()}
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#9ca3af' }}>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <span style={{ color: '#22c55e' }}>● Comprar</span>
+                      <span style={{ color: '#eab308' }}>● Mantener</span>
+                      <span style={{ color: '#ef4444' }}>● Vender</span>
+                    </div>
+                    <span>Total Analistas: {(selectedAsset.recommendations.strongBuy + selectedAsset.recommendations.buy + selectedAsset.recommendations.hold + selectedAsset.recommendations.sell + selectedAsset.recommendations.strongSell)}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* NEWS SECTION */}
+            {selectedAsset.news && selectedAsset.news.length > 0 && (
+              <div style={{ marginTop: '2rem', paddingBottom: '3rem' }}>
+                <h3 style={{ fontSize: '1.25rem', marginBottom: '1rem', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '0.5rem', color: '#e5e7eb' }}>
+                  NOTICIAS RELACIONADAS
+                </h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  {selectedAsset.news.map((n, i) => (
+                    <a key={i} href={n.link} target="_blank" rel="noreferrer" style={{ textDecoration: 'none', color: 'inherit' }}>
+                      <div style={{
+                        background: 'rgba(255,255,255,0.03)',
+                        padding: '1rem',
+                        borderRadius: '8px',
+                        borderLeft: '4px solid var(--accent-primary)',
+                        transition: 'background 0.2s',
+                        cursor: 'pointer'
+                      }}
+                      >
+                        <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '0.95rem', fontWeight: '500', color: '#f3f4f6' }}>{n.title}</h4>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#6b7280' }}>
+                          <span>{n.publisher}</span>
+                          <span>{new Date(n.time * 1000).toLocaleDateString()}</span>
+                        </div>
+                      </div>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+
 
           </div>
         ) : (

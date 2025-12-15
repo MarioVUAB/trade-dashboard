@@ -339,6 +339,53 @@ def analyze_symbol(symbol, interval="1d"):
             result["warning"] = "Insufficient data for RSI"
             
         result["status"] = "ok"
+        
+        # --- DATOS EXTRA: Noticias y Recomendaciones Institucionales ---
+        try:
+            # 1. Recomendaciones de Analistas (Wall Street)
+            rec_url = f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{symbol}?modules=recommendationTrend"
+            rec_resp = session.get(rec_url, timeout=5)
+            recommendations_data = None
+            if rec_resp.status_code == 200:
+                rec_json = rec_resp.json()
+                try:
+                    trend = rec_json["quoteSummary"]["result"][0]["recommendationTrend"]["trend"][0]
+                    recommendations_data = {
+                        "strongBuy": trend["strongBuy"],
+                        "buy": trend["buy"],
+                        "hold": trend["hold"],
+                        "sell": trend["sell"],
+                        "strongSell": trend["strongSell"]
+                    }
+                except:
+                    pass
+            result["recommendations"] = recommendations_data
+
+            # 2. Noticias Recientes
+            news_url = f"https://query2.finance.yahoo.com/v1/finance/search?q={symbol}"
+            news_resp = session.get(news_url, timeout=5)
+            news_data = []
+            if news_resp.status_code == 200:
+                news_json = news_resp.json()
+                try:
+                    # Extract news from search results
+                    items = news_json.get("news", [])
+                    for item in items[:5]: # Top 5 noticias
+                        news_data.append({
+                            "title": item.get("title"),
+                            "publisher": item.get("publisher"),
+                            "link": item.get("link"),
+                            "time": item.get("providerPublishTime")
+                        })
+                except:
+                    pass
+            result["news"] = news_data
+
+        except Exception as e_extra:
+            print(f"Error fetching extra data: {e_extra}")
+            result["recommendations"] = None
+            result["news"] = []
+
         return result
         
     except Exception as e:
