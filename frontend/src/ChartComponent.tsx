@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { createChart, ColorType } from 'lightweight-charts';
+import { createChart, ColorType, IChartApi, ISeriesApi } from 'lightweight-charts';
 
 interface ChartProps {
     data: any[];
@@ -14,16 +14,23 @@ interface ChartProps {
 
 export const ChartComponent = ({ data, colors = {} }: ChartProps) => {
     const chartContainerRef = useRef<HTMLDivElement>(null);
+    const chartRef = useRef<IChartApi | null>(null);
+
+    // Refs for Series
+    const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+    const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
+    const upperSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+    const lowerSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+    const smaSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+    const emaSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+
+    const isFirstLoad = useRef(true);
+
     const colorsString = JSON.stringify(colors);
 
+    // 1. Initialize Chart (Run once or on color change)
     useEffect(() => {
         if (!chartContainerRef.current) return;
-
-        const handleResize = () => {
-            if (chartContainerRef.current) {
-                chart.applyOptions({ width: chartContainerRef.current.clientWidth });
-            }
-        };
 
         const chartColors = JSON.parse(colorsString);
 
@@ -46,8 +53,8 @@ export const ChartComponent = ({ data, colors = {} }: ChartProps) => {
             },
         });
 
-        // Candlestick Series (Price)
-        const candlestickSeries = chart.addCandlestickSeries({
+        // Initialize Series
+        candleSeriesRef.current = chart.addCandlestickSeries({
             upColor: '#10b981',
             downColor: '#ef4444',
             borderVisible: false,
@@ -55,42 +62,62 @@ export const ChartComponent = ({ data, colors = {} }: ChartProps) => {
             wickDownColor: '#ef4444',
         });
 
-        // Volume Series (Histogram at bottom)
-        const volumeSeries = chart.addHistogramSeries({
-            priceFormat: {
-                type: 'volume',
-            },
-            priceScaleId: 'right', // Attach to main scale so it moves with price
+        volumeSeriesRef.current = chart.addHistogramSeries({
+            priceFormat: { type: 'volume' },
+            priceScaleId: 'right', // Overlay
             priceLineVisible: false,
-            lastValueVisible: false, // Don't show volume numbers on price axis
+            lastValueVisible: false,
         });
 
-        // Bollinger Bands (Lines)
-        const upperBandSeries = chart.addLineSeries({
+        upperSeriesRef.current = chart.addLineSeries({
             color: 'rgba(41, 98, 255, 0.3)',
             lineWidth: 1,
             lineStyle: 2, // Dashed
             title: 'Upper Band',
         });
 
-        const lowerBandSeries = chart.addLineSeries({
+        lowerSeriesRef.current = chart.addLineSeries({
             color: 'rgba(41, 98, 255, 0.3)',
             lineWidth: 1,
             lineStyle: 2, // Dashed
             title: 'Lower Band',
         });
 
-        const smaSeries = chart.addLineSeries({
-            color: '#fbbf24', // Amber/Yellow
+        smaSeriesRef.current = chart.addLineSeries({
+            color: '#fbbf24',
             lineWidth: 2,
             title: 'SMA 50',
         });
 
-        const ema200Series = chart.addLineSeries({
-            color: '#8b5cf6', // Violet/Purple
+        emaSeriesRef.current = chart.addLineSeries({
+            color: '#8b5cf6',
             lineWidth: 2,
             title: 'EMA 200 (Tendencia Macro)',
         });
+
+        chartRef.current = chart;
+
+        const handleResize = () => {
+            if (chartContainerRef.current) {
+                chart.applyOptions({ width: chartContainerRef.current.clientWidth });
+            }
+        };
+
+        window.addEventListener('resize', handleResize);
+
+        // Reset first load flag when chart is recreated
+        isFirstLoad.current = true;
+
+        return () => {
+            window.removeEventListener('resize', handleResize);
+            chart.remove();
+            chartRef.current = null;
+        };
+    }, [colorsString]); // Re-create only if colors change
+
+    // 2. Update Data (Run on data change)
+    useEffect(() => {
+        if (!data || data.length === 0 || !chartRef.current) return;
 
         // Transform Data
         const sortedData = [...data].sort((a, b) => (new Date(a.time).getTime() - new Date(b.time).getTime()));
@@ -116,7 +143,7 @@ export const ChartComponent = ({ data, colors = {} }: ChartProps) => {
         const priceRange = maxPrice - minPrice;
 
         const candles = sortedData
-            .filter(item => item.close != null) // Filter out projections
+            .filter(item => item.close != null)
             .map(item => ({
                 time: item.time,
                 open: item.open ?? item.close,
@@ -125,8 +152,6 @@ export const ChartComponent = ({ data, colors = {} }: ChartProps) => {
                 close: item.close,
             }));
 
-        // Normalize Volume to Price Scale (Overlay)
-        // Max Volume will reach 20% of the price range height, starting near the bottom.
         const volumeData = sortedData.map(item => ({
             time: item.time,
             value: (minPrice - (priceRange * 0.05)) + ((item.volume || 0) / maxVol) * (priceRange * 0.45),
@@ -149,15 +174,15 @@ export const ChartComponent = ({ data, colors = {} }: ChartProps) => {
             .filter(item => item.ema_200 != null && item.ema_200 !== 0)
             .map(item => ({ time: item.time, value: item.ema_200 }));
 
-        candlestickSeries.setData(candles);
-        volumeSeries.setData(volumeData);
-        upperBandSeries.setData(upperData);
-        lowerBandSeries.setData(lowerData);
-        smaSeries.setData(smaData);
-        ema200Series.setData(ema200Data);
+        // Set Data to Series
+        if (candleSeriesRef.current) candleSeriesRef.current.setData(candles);
+        if (volumeSeriesRef.current) volumeSeriesRef.current.setData(volumeData);
+        if (upperSeriesRef.current) upperSeriesRef.current.setData(upperData);
+        if (lowerSeriesRef.current) lowerSeriesRef.current.setData(lowerData);
+        if (smaSeriesRef.current) smaSeriesRef.current.setData(smaData);
+        if (emaSeriesRef.current) emaSeriesRef.current.setData(ema200Data);
 
-
-        // Add Markers (Signals)
+        // Add Markers
         const markers: any[] = [];
         for (const item of sortedData) {
             if (item.signal === 'BUY') {
@@ -167,7 +192,7 @@ export const ChartComponent = ({ data, colors = {} }: ChartProps) => {
                     color: '#10b981',
                     shape: 'arrowUp',
                     text: 'BUY',
-                    size: 2, // Larger
+                    size: 2,
                 });
             } else if (item.signal === 'SELL') {
                 markers.push({
@@ -180,18 +205,15 @@ export const ChartComponent = ({ data, colors = {} }: ChartProps) => {
                 });
             }
         }
+        if (candleSeriesRef.current) candleSeriesRef.current.setMarkers(markers);
 
-        candlestickSeries.setMarkers(markers);
+        // Only fit content on first load to prevent zoom reset on live updates
+        if (isFirstLoad.current && candles.length > 0) {
+            chartRef.current.timeScale().fitContent();
+            isFirstLoad.current = false;
+        }
 
-        chart.timeScale().fitContent();
-
-        window.addEventListener('resize', handleResize);
-
-        return () => {
-            window.removeEventListener('resize', handleResize);
-            chart.remove();
-        };
-    }, [data, colorsString]);
+    }, [data]);
 
     return (
         <div ref={chartContainerRef} style={{ width: '100%', position: 'relative' }} />
